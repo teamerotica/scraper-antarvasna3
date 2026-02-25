@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+
+# Phase 0: Raw HTML dumps
+raw_html/
+
+# Phase 1: SQLite Database
+scraped_data.db
+scraped_data.db-journal
+
+# Phase 2: Final JSON exports
+out/
+
+# History and Error Logs
+*.log
+
+# Mac System Files
+.DS_Store

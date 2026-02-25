@@ -1,0 +1,15 @@
+{
+  "name": "antarvasna3.com",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {},
+  "type": "module",
+  "dependencies": {
+    "better-sqlite3": "^12.6.2",
+    "cheerio": "^1.2.0",
+    "fs-extra": "^11.3.3",
+    "puppeteer": "^24.37.5",
+    "turndown": "^7.2.2"
+  }
+}
