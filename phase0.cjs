@@ -4,6 +4,31 @@ const path = require("path");
 
 const HISTORY_FILE = "urls_history.log";
 
+// Helper function to keep our filename generation consistent
+function getFilenameFromUrl(url) {
+  try {
+    // 1. Grab the last segment of the URL and strip query parameters
+    let rawSegment = url.split("/").filter(Boolean).pop().replace(/\?.*$/, "");
+
+    // 2. Decode any weird URL characters (like %20 to spaces)
+    let decodedSegment = decodeURIComponent(rawSegment).toLowerCase();
+
+    // 3. Strip .html if it already exists in the URL so we don't get double .html.html
+    if (decodedSegment.endsWith(".html")) {
+      decodedSegment = decodedSegment.replace(".html", "");
+    }
+
+    // 4. Return the clean filename
+    return decodedSegment + ".html";
+  } catch (err) {
+    // Fallback just in case decoding fails on a weird URL
+    return (
+      url.split("/").filter(Boolean).pop().replace(/\?.*$/, "").toLowerCase() +
+      ".html"
+    );
+  }
+}
+
 async function loadHistory() {
   await fs.ensureFile(HISTORY_FILE);
   const data = await fs.readFile(HISTORY_FILE, "utf-8");
@@ -19,7 +44,7 @@ async function crawlUrl(url, browser) {
   let page;
   try {
     page = await browser.newPage();
-    await page.setDefaultNavigationTimeout(45000); // Bumped to 45s for Cloudflare
+    await page.setDefaultNavigationTimeout(45000);
     await page.setRequestInterception(true);
     page.on("request", (request) => {
       if (
@@ -51,9 +76,7 @@ async function crawlUrl(url, browser) {
     }
 
     const html = await page.content();
-    const filename =
-      url.split("/").filter(Boolean).pop().replace(/\?.*$/, "").toLowerCase() +
-      ".html";
+    const filename = getFilenameFromUrl(url);
 
     await fs.writeFile(path.join("raw_html", filename), html);
     await fs.appendFile(HISTORY_FILE, `${url}\n`); // Log success immediately
@@ -82,17 +105,39 @@ async function processChunk(urls, browser, chunkIndex) {
 
 async function crawl(concurrency = 4) {
   await fs.ensureDir("raw_html");
-  const history = await loadHistory();
 
-  // Read URLs and filter out ones we already did!
+  // 1. Check for the --force flag in the terminal command
+  const isForce = process.argv.includes("--force");
+
+  const history = await loadHistory();
+  // Read existing files in the directory so we can cross-reference
+  const existingFiles = new Set(await fs.readdir("raw_html").catch(() => []));
+
   const allUrls = (await fs.readFile("urls.txt", "utf-8"))
     .split("\n")
     .map((u) => u.trim())
     .filter(Boolean);
-  const pendingUrls = allUrls.filter((url) => !history.has(url));
+
+  // 2. Filter the URLs based on history, existing files, and the --force flag
+  const pendingUrls = allUrls.filter((url) => {
+    if (isForce) return true; // Scrape everything if --force is used
+
+    if (history.has(url)) return false; // Skip if in log
+
+    const filename = getFilenameFromUrl(url);
+    if (existingFiles.has(filename)) return false; // Skip if file already exists manually
+
+    return true; // Keep if neither condition met
+  });
+
+  if (isForce) {
+    console.log(
+      "⚠️  --force flag detected! Ignoring history and raw_html files. Scraping everything.",
+    );
+  }
 
   console.log(
-    `Found ${allUrls.length} total URLs. ${history.size} already done. ${pendingUrls.length} pending.`,
+    `Found ${allUrls.length} total URLs. ${allUrls.length - pendingUrls.length} already done/exist. ${pendingUrls.length} pending.`,
   );
   if (pendingUrls.length === 0) return console.log("🎉 All URLs processed!");
 

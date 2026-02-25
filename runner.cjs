@@ -1,10 +1,11 @@
 const { spawn } = require("child_process");
 
-// Helper function to run a terminal command and pipe the output to your screen
-function runCommand(command, args) {
+// Capture any arguments passed to the runner (like --urls patch.txt or --force)
+const args = process.argv.slice(2);
+
+function runCommand(command, commandArgs) {
   return new Promise((resolve, reject) => {
-    // stdio: "inherit" ensures you see all the live console logs
-    const proc = spawn(command, args, { stdio: "inherit" });
+    const proc = spawn(command, commandArgs, { stdio: "inherit" });
 
     proc.on("close", (code) => {
       if (code === 0) {
@@ -16,15 +17,18 @@ function runCommand(command, args) {
   });
 }
 
-// The Master Pipeline
 async function runAll() {
   console.log("🚀 Firing up the Armored Pipeline...\n");
+  if (args.length > 0) {
+    console.log(`🛠️  Passing arguments to Phase 0: ${args.join(" ")}`);
+  }
 
   try {
-    console.log("======================================================");
+    console.log("\n======================================================");
     console.log("▶ [PHASE 0] Starting the Armored Fetcher (Puppeteer)");
     console.log("======================================================");
-    await runCommand("node", ["phase0.cjs"]);
+    // Notice we spread the ...args here so phase0 gets them!
+    await runCommand("node", ["phase0.cjs", ...args]);
 
     console.log("\n======================================================");
     console.log("▶ [PHASE 1] Parsing HTML and Loading SQLite DB");
