@@ -106,39 +106,51 @@ async function processChunk(urls, browser, chunkIndex) {
 async function crawl(concurrency = 4) {
   await fs.ensureDir("raw_html");
 
-  // 1. Check for the --force flag in the terminal command
-  const isForce = process.argv.includes("--force");
+  // 1. Parse Command Line Arguments
+  const args = process.argv.slice(2);
+  const isForce = args.includes("--force");
 
-  const history = await loadHistory();
-  // Read existing files in the directory so we can cross-reference
-  const existingFiles = new Set(await fs.readdir("raw_html").catch(() => []));
-
-  const allUrls = (await fs.readFile("urls.txt", "utf-8"))
-    .split("\n")
-    .map((u) => u.trim())
-    .filter(Boolean);
-
-  // 2. Filter the URLs based on history, existing files, and the --force flag
-  const pendingUrls = allUrls.filter((url) => {
-    if (isForce) return true; // Scrape everything if --force is used
-
-    if (history.has(url)) return false; // Skip if in log
-
-    const filename = getFilenameFromUrl(url);
-    if (existingFiles.has(filename)) return false; // Skip if file already exists manually
-
-    return true; // Keep if neither condition met
-  });
-
-  if (isForce) {
-    console.log(
-      "⚠️  --force flag detected! Ignoring history and raw_html files. Scraping everything.",
-    );
+  // Look for --urls flag and grab the next argument as the filename
+  let urlFile = "urls.txt";
+  const urlsIndex = args.indexOf("--urls");
+  if (urlsIndex !== -1 && args.length > urlsIndex + 1) {
+    urlFile = args[urlsIndex + 1];
   }
 
+  const history = await loadHistory();
+  const existingFiles = new Set(await fs.readdir("raw_html").catch(() => []));
+
+  // 2. Safely read the specified URL file
+  let allUrls = [];
+  try {
+    allUrls = (await fs.readFile(urlFile, "utf-8"))
+      .split("\n")
+      .map((u) => u.trim())
+      .filter(Boolean);
+  } catch (err) {
+    console.error(
+      `\n❌ Fatal Error: Could not read file "${urlFile}". Does it exist?`,
+    );
+    return;
+  }
+
+  // 3. Filter the URLs
+  const pendingUrls = allUrls.filter((url) => {
+    if (isForce) return true;
+    if (history.has(url)) return false;
+    const filename = getFilenameFromUrl(url);
+    if (existingFiles.has(filename)) return false;
+    return true;
+  });
+
+  console.log(`\n📂 Target File: ${urlFile}`);
+  if (isForce) {
+    console.log("⚠️  --force flag detected! Bypassing history checks.");
+  }
   console.log(
-    `Found ${allUrls.length} total URLs. ${allUrls.length - pendingUrls.length} already done/exist. ${pendingUrls.length} pending.`,
+    `📊 Found ${allUrls.length} total URLs. ${allUrls.length - pendingUrls.length} already done/exist. ${pendingUrls.length} pending.\n`,
   );
+
   if (pendingUrls.length === 0) return console.log("🎉 All URLs processed!");
 
   const browser = await puppeteer.launch({
@@ -163,7 +175,7 @@ async function crawl(concurrency = 4) {
       pendingUrls.slice(i * chunkSize, (i + 1) * chunkSize),
     );
 
-    console.log(`Starting crawl with ${concurrency} workers...\n`);
+    console.log(`🚀 Starting crawl with ${concurrency} workers...\n`);
     await Promise.all(
       chunks.map((chunk, index) => processChunk(chunk, browser, index + 1)),
     );
