@@ -1,6 +1,7 @@
 const puppeteer = require("puppeteer");
 const fs = require("fs-extra");
 const path = require("path");
+const readline = require("readline/promises"); // <-- Bring in the interactive prompt
 
 const HISTORY_FILE = "urls_history.log";
 
@@ -109,12 +110,54 @@ async function crawl(concurrency = 4) {
   // 1. Parse Command Line Arguments
   const args = process.argv.slice(2);
   const isForce = args.includes("--force");
+  const isBypass = args.includes("--yes-i-know-what-i-am-doing"); // Backdoor for PM2 automation
 
   // Look for --urls flag and grab the next argument as the filename
   let urlFile = "urls.txt";
   const urlsIndex = args.indexOf("--urls");
   if (urlsIndex !== -1 && args.length > urlsIndex + 1) {
     urlFile = args[urlsIndex + 1];
+  }
+
+  // ==========================================
+  // 🚨 THE THREE-STRIKE SAFETY PROTOCOL
+  // ==========================================
+  if (urlFile === "urls.txt" && !isBypass) {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+
+    console.log("\n======================================================");
+    console.log("  ⚠️  WARNING 1/3: MASSIVE CRAWL DETECTED");
+    console.log("======================================================");
+    console.log("You are about to run against the master 'urls.txt' list.");
+    console.log("This is a heavy operation meant for one-time initialization.");
+    const ans1 = await rl.question("Are you sure you want to proceed? (y/n): ");
+    if (ans1.toLowerCase() !== "y") {
+      console.log("Aborting. Use '--urls patch.txt' for routine updates.");
+      process.exit(0);
+    }
+
+    console.log("\n  ☢️  WARNING 2/3: SERVER IMPACT");
+    console.log("Crawling the entire site again could lead to IP bans.");
+    const ans2 = await rl.question(
+      "Type 'yes' to confirm you want to do this: ",
+    );
+    if (ans2.toLowerCase() !== "yes") {
+      console.log("Aborting. Stay safe out there.");
+      process.exit(0);
+    }
+
+    console.log("\n  💀 WARNING 3/3: FINAL CONFIRMATION");
+    const ans3 = await rl.question("Type 'DO IT' to unlock the tank: ");
+    if (ans3 !== "DO IT") {
+      console.log("Aborting. Smart choice.");
+      process.exit(0);
+    }
+
+    rl.close();
+    console.log("\n🔓 Safety disengaged. Loading armor...");
   }
 
   const history = await loadHistory();
