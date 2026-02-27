@@ -34,16 +34,21 @@ module.exports = function parse(html, filename) {
     "/",
   );
 
-  // --- NEW: Convert the cleaned HTML to Markdown ---
+  // Convert the cleaned HTML to Markdown
   const markdownContent = turndownService.turndown(mainContentHtml.trim());
 
-  // Calculate reading time (using Cheerio's raw text for accurate word count)
+  // Calculate reading time
   const plainText = storyContent.text().trim();
   const words = plainText ? plainText.split(/\s+/).length : 0;
   const readingTime = Math.ceil(words / 200) + " min";
 
-  // Try to get JSON-LD data
+  // ==========================================
+  // 🕵️ SLUG EXTRACTION ENGINE
+  // ==========================================
+  let targetUrl = null;
   let jsonLd = null;
+
+  // 1. Try to extract from JSON-LD first
   try {
     const ldJsonElements = $('script[type="application/ld+json"]');
     if (ldJsonElements.length) {
@@ -52,17 +57,42 @@ module.exports = function parse(html, filename) {
           const parsed = JSON.parse($(elem).html());
           if (parsed && parsed["@type"] === "Article") {
             jsonLd = parsed;
-            return false;
+            // Grab the URL from either property
+            targetUrl = parsed.url || parsed.mainEntityOfPage?.["@id"];
+            return false; // Break out of the each loop once found
           }
         } catch (e) {}
       });
     }
   } catch (e) {}
 
-  // Fallback for ID if JSON-LD fails
-  let idArray = jsonLd?.mainEntityOfPage?.["@id"]?.split("/") || [];
-  let rawSlug = idArray[4] || filename.replace(".html", "");
-  let rawGenreSlug = idArray[3] || "uncategorized";
+  // 2. Fallback to Canonical Link if JSON-LD is missing or broken
+  if (!targetUrl) {
+    targetUrl = $('link[rel="canonical"]').attr("href");
+  }
+
+  // 3. Safely parse the URL to get the exact slugs
+  let rawSlug = filename.replace(".html", ""); // Absolute last resort fallback
+  let rawGenreSlug = "uncategorized";
+
+  if (targetUrl) {
+    try {
+      // Using Node's native URL parser is way safer than split("/")
+      const urlObj = new URL(targetUrl);
+
+      // urlObj.pathname looks like "/genre/story-title/"
+      const pathSegments = urlObj.pathname.split("/").filter(Boolean);
+
+      if (pathSegments.length >= 2) {
+        rawSlug = pathSegments.pop(); // e.g., "20-saal-ladki-ki-gand"
+        rawGenreSlug = pathSegments.pop(); // e.g., "lana-gand-chudai-female"
+      } else if (pathSegments.length === 1) {
+        rawSlug = pathSegments.pop();
+      }
+    } catch (err) {
+      // If the URL is somehow malformed, we just stick to the filename fallback
+    }
+  }
 
   return {
     slug: rawSlug,
@@ -86,7 +116,6 @@ module.exports = function parse(html, filename) {
       created_at: (jsonLd?.datePublished || new Date().toISOString()).trim(),
       word_count: words,
     },
-    // We now return the Markdown string instead of HTML!
     content: markdownContent,
   };
 };
