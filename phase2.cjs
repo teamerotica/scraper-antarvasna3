@@ -19,7 +19,16 @@ async function exportData() {
   // 1. GENERATE THE GLOBAL "LATEST" INDEX (All stories, newest to oldest)
   // ======================================================================
   console.log(`\n🌍 Generating Global 'Latest' Index...`);
-  const allStories = db.prepare("SELECT * FROM stories ORDER BY id DESC").all();
+
+  // FIXED: Order by the actual creation date, newest first.
+  const allStories = db
+    .prepare(
+      `
+    SELECT * FROM stories 
+    ORDER BY createdAt DESC, id DESC
+  `,
+    )
+    .all();
 
   const latestPagesDir = path.join(baseOutDir, "latest", "pages");
   await fs.ensureDir(latestPagesDir);
@@ -32,7 +41,14 @@ async function exportData() {
     const pageIndexData = [];
 
     for (const story of chunk) {
-      const parsedDate = new Date(story.createdAt);
+      let parsedDate;
+      try {
+        parsedDate = new Date(story.createdAt);
+        // Fallback if the date string is completely mangled
+        if (isNaN(parsedDate.getTime())) parsedDate = new Date();
+      } catch (e) {
+        parsedDate = new Date();
+      }
 
       const indexItem = {
         id: story.slug,
@@ -51,11 +67,11 @@ async function exportData() {
       pageIndexData.push(indexItem);
 
       // We only need to save the full content JSON files ONCE.
-      // We do it here during the global loop.
       const fullStoryData = {
         ...indexItem,
         content: story.content,
       };
+
       await fs.writeJson(
         path.join(storiesOutDir, `${story.slug}.json`),
         fullStoryData,
@@ -87,9 +103,17 @@ async function exportData() {
   for (const genre of genres) {
     if (!genre) continue;
 
+    // FIXED: Order by the actual creation date for genres as well.
     const genreStories = db
-      .prepare("SELECT * FROM stories WHERE genre = ? ORDER BY id DESC")
+      .prepare(
+        `
+      SELECT * FROM stories 
+      WHERE genre = ? 
+      ORDER BY createdAt DESC, id DESC
+    `,
+      )
       .all(genre);
+
     const pagesDir = path.join(baseOutDir, "genres", genre, "pages");
     await fs.ensureDir(pagesDir);
 
@@ -101,7 +125,14 @@ async function exportData() {
       const pageIndexData = [];
 
       for (const story of chunk) {
-        const parsedDate = new Date(story.createdAt);
+        let parsedDate;
+        try {
+          parsedDate = new Date(story.createdAt);
+          if (isNaN(parsedDate.getTime())) parsedDate = new Date();
+        } catch (e) {
+          parsedDate = new Date();
+        }
+
         pageIndexData.push({
           id: story.slug,
           title: story.title,
