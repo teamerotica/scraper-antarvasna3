@@ -1,7 +1,8 @@
 const { spawn } = require("child_process");
 
-// Capture any arguments passed to the runner (like --urls patch.txt or --force)
+// Capture any arguments passed to the runner (like --urls patch.txt, --force, or --skip-crawling)
 const args = process.argv.slice(2);
+const skipCrawling = args.includes("--skip-crawling");
 
 function runCommand(command, commandArgs) {
   return new Promise((resolve, reject) => {
@@ -20,15 +21,23 @@ function runCommand(command, commandArgs) {
 async function runAll() {
   console.log("🚀 Firing up the Armored Pipeline...\n");
   if (args.length > 0) {
-    console.log(`🛠️  Passing arguments to Phase 0: ${args.join(" ")}`);
+    console.log(`🛠️  Passing CLI arguments: ${args.join(" ")}`);
   }
 
   try {
-    console.log("\n======================================================");
-    console.log("▶ [PHASE 0] Starting the Armored Fetcher (Puppeteer)");
-    console.log("======================================================");
-    // Notice we spread the ...args here so phase0 gets them!
-    await runCommand("node", ["phase0.cjs", ...args]);
+    if (skipCrawling) {
+      console.log("\n======================================================");
+      console.log("⏭️  [PHASE 0 SKIPPED] --skip-crawling flag detected.");
+      console.log("======================================================");
+      console.log(
+        "Proceeding directly to Phase 1 with existing raw_html/ files...",
+      );
+    } else {
+      console.log("\n======================================================");
+      console.log("▶ [PHASE 0] Starting the Armored Fetcher (Puppeteer)");
+      console.log("======================================================");
+      await runCommand("node", ["phase0.cjs", ...args]);
+    }
 
     console.log("\n======================================================");
     console.log("▶ [PHASE 1] Parsing HTML and Loading SQLite DB");
